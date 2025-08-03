@@ -4,10 +4,22 @@ import { db } from "@/lib/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-06-20",
+  apiVersion: "2025-07-30.basil",
 });
 
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+
+// Helper function to update booking status with error handling and logging
+async function updateBookingStatus(bookingId: string, updateData: any, eventType: string) {
+  try {
+    const bookingRef = doc(db, "bookings", bookingId);
+    await updateDoc(bookingRef, updateData);
+    console.log(`✅ Booking ${bookingId} updated via ${eventType}:`, updateData);
+  } catch (error) {
+    console.error(`❌ Error updating booking ${bookingId} via ${eventType}:`, error);
+    throw error;
+  }
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.text();
@@ -40,20 +52,41 @@ export async function POST(req: NextRequest) {
       
       // Update the booking status in Firebase
       if (session.metadata?.bookingId) {
-        try {
-          const bookingRef = doc(db, "bookings", session.metadata.bookingId);
-          await updateDoc(bookingRef, {
-            paymentStatus: "paid",
-            serviceStatus: "scheduled",
-            paymentIntentId: session.payment_intent,
-            stripeSessionId: session.id,
-            paidAt: new Date(),
-          });
-          
-          console.log(`Booking ${session.metadata.bookingId} marked as paid`);
-        } catch (error) {
-          console.error("Error updating booking status:", error);
-        }
+        await updateBookingStatus(session.metadata.bookingId, {
+          paymentStatus: "paid",
+          serviceStatus: "scheduled",
+          paymentIntentId: session.payment_intent,
+          stripeSessionId: session.id,
+          paidAt: new Date(),
+        }, "checkout.session.completed");
+      }
+      break;
+
+    case "payment_intent.succeeded":
+      const paymentIntent = event.data.object as Stripe.PaymentIntent;
+      
+      // Find booking by payment intent metadata
+      if (paymentIntent.metadata?.bookingId) {
+        await updateBookingStatus(paymentIntent.metadata.bookingId, {
+          paymentStatus: "paid",
+          serviceStatus: "scheduled",
+          paymentIntentId: paymentIntent.id,
+          paidAt: new Date(),
+        }, "payment_intent.succeeded");
+      }
+      break;
+
+    case "charge.succeeded":
+      const charge = event.data.object as Stripe.Charge;
+      
+      // Find booking by charge metadata
+      if (charge.metadata?.bookingId) {
+        await updateBookingStatus(charge.metadata.bookingId, {
+          paymentStatus: "paid",
+          serviceStatus: "scheduled",
+          chargeId: charge.id,
+          paidAt: new Date(),
+        }, "charge.succeeded");
       }
       break;
 
@@ -62,18 +95,11 @@ export async function POST(req: NextRequest) {
       
       // Mark booking as expired/cancelled in Firebase
       if (expiredSession.metadata?.bookingId) {
-        try {
-          const bookingRef = doc(db, "bookings", expiredSession.metadata.bookingId);
-          await updateDoc(bookingRef, {
-            paymentStatus: "expired",
-            serviceStatus: "cancelled",
-            expiredAt: new Date(),
-          });
-          
-          console.log(`Booking ${expiredSession.metadata.bookingId} marked as expired`);
-        } catch (error) {
-          console.error("Error updating booking status:", error);
-        }
+        await updateBookingStatus(expiredSession.metadata.bookingId, {
+          paymentStatus: "expired",
+          serviceStatus: "cancelled",
+          expiredAt: new Date(),
+        }, "checkout.session.expired");
       }
       break;
 

@@ -4,7 +4,7 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc } from "firebase/firestore";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-06-20",
+  apiVersion: "2025-07-30.basil",
 });
 
 const getPriceIdForBins = (bins: string) => {
@@ -78,6 +78,14 @@ export async function POST(req: NextRequest) {
         customerPhone: phone,
         bins: bins,
         discountCode: discountCode || "",
+      },
+      payment_intent_data: {
+        metadata: {
+          bookingId: docRef.id,
+          customerName: name,
+          customerPhone: phone,
+          bins: bins,
+        },
       },
     };
 
