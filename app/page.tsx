@@ -398,7 +398,7 @@ export default function BinCleaningService() {
                   <div className="mb-6">
                     <h4 className="text-lg font-semibold text-gray-900 mb-4">Choose Service Date</h4>
                     <p className="text-gray-600 mb-4">
-                      Select your preferred Monday for bin cleaning service (6:00 AM - 6:00 PM)
+                      Select your preferred Monday for bin cleaning service (8am-2pm)
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
@@ -439,7 +439,7 @@ export default function BinCleaningService() {
                             <div className="space-y-2">
                               <div className="flex items-center justify-center space-x-2 text-blue-600">
                                 <Clock className="h-4 w-4" />
-                                <span className="font-medium">6:00 AM - 6:00 PM</span>
+                                <span className="font-medium">8am-2pm</span>
                               </div>
 
                               {selectedDate === serviceDate.id && (
