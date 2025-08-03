@@ -621,9 +621,7 @@ export default function BinCleaningService() {
                       </p>
                     )}
                     <p className="text-xs text-gray-500 mt-2">
-                      Try: <code className="bg-gray-100 px-1 rounded">FIRST10</code>,{" "}
-                      <code className="bg-gray-100 px-1 rounded">CLEAN20</code>, or{" "}
-                      <code className="bg-gray-100 px-1 rounded">FAMILY15</code>
+                      Try: <code className="bg-gray-100 px-1 rounded">FIRST5</code>,{" "}
                     </p>
                   </div>
 
