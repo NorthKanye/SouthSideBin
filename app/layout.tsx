@@ -29,8 +29,12 @@ export const metadata: Metadata = {
     title: "CleanBins Pro - Professional Bin Cleaning Service",
     description: "Keep your bins fresh and clean with our eco-friendly professional cleaning service.",
   },
-  viewport: "width=device-width, initial-scale=1",
-    generator: 'v0.dev'
+  generator: 'v0.dev'
+}
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({
