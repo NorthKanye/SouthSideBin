@@ -941,6 +941,32 @@ export default function BinCleaningService() {
                   </div>
                   )}
 
+                  {purchaseMode === "subscription" && selectedPlan && (
+                    <div className="bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200 rounded-lg p-4 mb-6">
+                      <h4 className="font-semibold text-gray-900 mb-3">Subscription Summary</h4>
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>{selectedPlan === "weekly" ? "2 Bins Weekly" : "2 Bins Fortnightly"}:</span>
+                          <span>${getBasePriceForSelected()}</span>
+                        </div>
+                        {discountInfo?.isValid && (discountInfo.discountAmount > 0 || discountInfo.discountPercent > 0) && (
+                          <div className="flex justify-between text-sm text-green-600">
+                            <span>Discount Applied:</span>
+                            <span>
+                              {discountInfo.discountPercent > 0
+                                ? `- ${discountInfo.discountPercent}%`
+                                : `- $${discountInfo.discountAmount}`}
+                            </span>
+                          </div>
+                        )}
+                        <div className="border-t pt-2 flex justify-between font-bold text-base">
+                          <span>Total per month:</span>
+                          <span className="text-blue-600">${finalPrice}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <Button
                     type="submit"
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 text-lg transition-colors"
@@ -960,7 +986,7 @@ export default function BinCleaningService() {
                       <>
                         Start Subscription
                         {selectedPlan && (
-                          <span className="ml-2">- ${selectedPlan === "weekly" ? 80 : 60}/mo</span>
+                          <span className="ml-2">- ${finalPrice}/mo</span>
                         )}
                       </>
                     ) : (
