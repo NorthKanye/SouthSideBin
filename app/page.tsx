@@ -312,13 +312,18 @@ export default function BinCleaningService() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!selectedOption) {
+    if (!selectedDate) {
+      alert("Please select a service date")
+      return
+    }
+
+    if (purchaseMode === "one_time" && !selectedOption) {
       alert("Please select a bin cleaning package")
       return
     }
 
-    if (!selectedDate) {
-      alert("Please select a service date")
+    if (purchaseMode === "subscription" && !selectedPlan) {
+      alert("Please select a subscription plan")
       return
     }
 
@@ -332,10 +337,6 @@ export default function BinCleaningService() {
       const selectedServiceDate = getNextMondays.find((d) => d.id === selectedDate)
 
       if (purchaseMode === "subscription") {
-        if (!selectedPlan) {
-          alert("Please select a subscription plan")
-          return
-        }
         const subPayload = {
           name: formData.name,
           email: formData.email,
@@ -344,6 +345,7 @@ export default function BinCleaningService() {
           notes: formData.notes,
           date: selectedServiceDate?.date.toISOString(),
           plan: selectedPlan,
+          discountCode: discountCode,
         }
         const response = await fetch("/api/checkout_subscriptions", {
           method: "POST",
@@ -367,7 +369,7 @@ export default function BinCleaningService() {
           notes: formData.notes,
           waterAccess: formData.waterAccess,
           powerAccess: formData.powerAccess,
-          bins: selectedOption.toString(),
+          bins: selectedOption!.toString(),
           date: selectedServiceDate?.date.toISOString(),
           dateFormatted: selectedServiceDate?.formatted,
           discountCode: discountCode,
