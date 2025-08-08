@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2024-06-20",
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {});
 
 const getPriceIdForBins = (bins: string) => {
   switch (bins) {
@@ -18,21 +16,28 @@ const getPriceIdForBins = (bins: string) => {
   }
 };
 
+const getSubscriptionPriceId = (plan?: string | null) => {
+  if (!plan) return null;
+  if (plan === "fortnightly") return process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_SUB_2_BINS_FORTNIGHTLY;
+  if (plan === "weekly") return process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_SUB_2_BINS_WEEKLY;
+  return null;
+};
+
 export async function POST(req: NextRequest) {
   try {
-    const { discountCode, bins } = await req.json();
+    const { discountCode, bins, priceId: overridePriceId, subscriptionPlan } = await req.json();
 
-    if (!bins) {
+    if (!bins && !overridePriceId && !subscriptionPlan) {
       return NextResponse.json(
-        { error: "Bins are required" },
+        { error: "Bins or a price context (priceId/subscriptionPlan) is required" },
         { status: 400 }
       );
     }
 
-    const priceId = getPriceIdForBins(bins);
+    const priceId = overridePriceId || getSubscriptionPriceId(subscriptionPlan) || (bins ? getPriceIdForBins(bins) : null);
     if (!priceId) {
       return NextResponse.json(
-        { error: "Invalid number of bins or missing price ID" },
+        { error: "Invalid selection or missing price ID" },
         { status: 400 }
       );
     }

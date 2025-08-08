@@ -222,9 +222,10 @@ export default function BinCleaningService() {
 
   // Debounced validate discount as user types
   useEffect(() => {
-    if (!selectedOption) return
+    // Determine context (one-time with bins OR subscription plan)
     const code = discountCode.trim()
-    const bins = String(selectedOption)
+    const bins = selectedOption ? String(selectedOption) : undefined
+    const subscriptionPlan = purchaseMode === "subscription" && selectedPlan ? selectedPlan : undefined
 
     // Reset state if input cleared
     if (code.length === 0) {
@@ -245,7 +246,7 @@ export default function BinCleaningService() {
         const res = await fetch("/api/validate-discount", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ discountCode: code, bins }),
+          body: JSON.stringify({ discountCode: code, bins, subscriptionPlan }),
         })
         const data = await res.json()
         if (res.ok) {
@@ -280,9 +281,15 @@ export default function BinCleaningService() {
 
     return () => clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discountCode, selectedOption])
+  }, [discountCode, selectedOption, purchaseMode, selectedPlan])
 
   const getBasePriceForSelected = useCallback((): number => {
+    if (purchaseMode === "subscription") {
+      // Hardcoded display, real amount is on Stripe
+      if (selectedPlan === "weekly") return 80
+      if (selectedPlan === "fortnightly") return 60
+      return 0
+    }
     if (!selectedOption) return 0
     const key = String(selectedOption)
     if (livePrices && typeof livePrices[key] === "number") {
@@ -290,16 +297,15 @@ export default function BinCleaningService() {
     }
     // fallback to static config if live price unavailable
     return binOptions.find((o) => o.id === selectedOption)?.price || 0
-  }, [selectedOption, livePrices])
+  }, [purchaseMode, selectedPlan, selectedOption, livePrices])
 
   const finalPrice = useMemo(() => {
-    if (!selectedOption) return 0
     // Prefer server-calculated finalPrice when discount info exists
     if (discountInfo && typeof discountInfo.finalPrice === "number") {
       return Math.max(0, Math.round(discountInfo.finalPrice))
     }
     return getBasePriceForSelected()
-  }, [selectedOption, discountInfo, getBasePriceForSelected])
+  }, [discountInfo, getBasePriceForSelected])
 
   const selectedBinOption = useMemo(() => binOptions.find((option) => option.id === selectedOption), [selectedOption])
 
@@ -884,10 +890,64 @@ export default function BinCleaningService() {
                   </div>
                   )}
 
+                  {purchaseMode === "subscription" && (
+                  <div className="border-t pt-6">
+                    <Label htmlFor="discount-sub" className="text-sm font-medium">
+                      Discount Code (Subscription)
+                    </Label>
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="relative flex-1">
+                        <Input
+                          id="discount-sub"
+                          value={discountCode}
+                          onChange={(e) => setDiscountCode(e.target.value)}
+                          placeholder="Enter discount code"
+                          className={`pr-9 ${discountCode.trim() && !isCheckingDiscount && (discountInfo?.isValid ? "border-green-500" : "border-red-500")}`}
+                        />
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                          {isCheckingDiscount ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+                          ) : discountCode.trim().length > 0 ? (
+                            discountInfo?.isValid ? (
+                              <CheckCircle className="h-5 w-5 text-green-600" />
+                            ) : (
+                              <XCircle className="h-5 w-5 text-red-500" />
+                            )
+                          ) : null}
+                        </div>
+                      </div>
+                      {discountCode.trim().length > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            setDiscountCode("")
+                            setDiscountInfo(null)
+                          }}
+                          className="whitespace-nowrap"
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                    {discountInfo?.isValid && (
+                      <p className="text-green-600 text-sm mt-2 flex items-center">
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        {discountInfo.discountPercent > 0 ? `${discountInfo.discountPercent}% off applied` : `$${discountInfo.discountAmount} off applied`}
+                      </p>
+                    )}
+                  </div>
+                  )}
+
                   <Button
                     type="submit"
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 text-lg transition-colors"
-                    disabled={!selectedOption || !selectedDate || (purchaseMode === "subscription" && !selectedPlan) || isSubmitting}
+                    disabled={
+                      isSubmitting ||
+                      !selectedDate ||
+                      (purchaseMode === "one_time" && !selectedOption) ||
+                      (purchaseMode === "subscription" && !selectedPlan)
+                    }
                   >
                     {isSubmitting ? (
                       <span className="flex items-center justify-center">

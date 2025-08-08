@@ -21,7 +21,7 @@ const getSubscriptionPriceId = (plan: SubscriptionPlan) => {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, email, phone, address, notes, date, plan } = body as {
+    const { name, email, phone, address, notes, date, plan, discountCode } = body as {
       name: string;
       email: string;
       phone: string;
@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
       notes?: string;
       date?: string;
       plan: SubscriptionPlan;
+      discountCode?: string;
     };
 
     const priceId = getSubscriptionPriceId(plan);
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
       createdAt: new Date(),
     });
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: "subscription",
       line_items: [
         {
@@ -83,7 +84,21 @@ export async function POST(req: NextRequest) {
           bins: "2",
         },
       },
-    });
+    };
+
+    // Optional: apply promotion code
+    if (discountCode) {
+      try {
+        const promotionCodes = await stripe.promotionCodes.list({ code: discountCode, active: true, limit: 1 });
+        if (promotionCodes.data.length > 0) {
+          (sessionConfig as any).discounts = [{ promotion_code: promotionCodes.data[0].id }];
+        }
+      } catch (e) {
+        // continue without discount
+      }
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionConfig);
 
     return NextResponse.json({ sessionId: session.id, url: session.url });
   } catch (error) {
