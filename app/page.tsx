@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useEffect } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Trash2, Recycle, Leaf, CheckCircle, Phone, Mail, Star, Shield, Clock, Sparkles } from "lucide-react"
+import { Trash2, Recycle, Leaf, CheckCircle, XCircle, Phone, Mail, Star, Shield, Clock, Sparkles } from "lucide-react"
 
 interface ServiceDate {
   id: number
@@ -80,11 +80,7 @@ const binOptions: BinOption[] = [
   },
 ]
 
-const discountCodes: Record<string, number> = {
-  FIRST10: 10,
-  CLEAN20: 20,
-  FAMILY15: 15,
-}
+// Live pricing and discounts are pulled from the server/Stripe
 
 const features = [
   { icon: Sparkles, title: "Eco-Friendly Products", description: "Safe for your family and the environment" },
@@ -106,9 +102,11 @@ export default function BinCleaningService() {
   })
   const [formErrors, setFormErrors] = useState<FormErrors>({})
   const [discountCode, setDiscountCode] = useState("")
-  const [appliedDiscount, setAppliedDiscount] = useState(0)
+  const [isCheckingDiscount, setIsCheckingDiscount] = useState(false)
+  const [discountInfo, setDiscountInfo] = useState<{ isValid: boolean; discountAmount: number; discountPercent: number; finalPrice: number } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedDate, setSelectedDate] = useState<number | null>(null)
+  const [livePrices, setLivePrices] = useState<Record<string, number | null> | null>(null)
 
   const validateEmail = useCallback((email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -198,20 +196,105 @@ export default function BinCleaningService() {
     [formErrors],
   )
 
-  const applyDiscountCode = useCallback(() => {
-    const discount = discountCodes[discountCode.toUpperCase()]
-    if (discount) {
-      setAppliedDiscount(discount)
-    } else {
-      setAppliedDiscount(0)
+  // Fetch live prices from Stripe via API on mount
+  useEffect(() => {
+    let isMounted = true
+    const fetchPrices = async () => {
+      try {
+        const res = await fetch("/api/prices")
+        if (!res.ok) return
+        const data = await res.json()
+        if (isMounted) setLivePrices(data.prices || null)
+      } catch (e) {
+        // ignore and keep fallback prices
+      }
     }
-  }, [discountCode])
+    fetchPrices()
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  // Debounced validate discount as user types
+  useEffect(() => {
+    if (!selectedOption) return
+    const code = discountCode.trim()
+    const bins = String(selectedOption)
+
+    // Reset state if input cleared
+    if (code.length === 0) {
+      setDiscountInfo(null)
+      setIsCheckingDiscount(false)
+      return
+    }
+
+    // Only start validating after a few characters
+    if (code.length < 3) {
+      setDiscountInfo(null)
+      return
+    }
+
+    setIsCheckingDiscount(true)
+    const handle = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/validate-discount", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ discountCode: code, bins }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          // If user has changed code meanwhile, ignore
+          if (code === discountCode.trim()) {
+            if (data.isValid) {
+              setDiscountInfo({
+                isValid: true,
+                discountAmount: data.discountAmount || 0,
+                discountPercent: data.discountPercent || 0,
+                finalPrice: data.finalPrice,
+              })
+            } else {
+              // Keep finalPrice for live display if provided
+              setDiscountInfo({
+                isValid: false,
+                discountAmount: 0,
+                discountPercent: 0,
+                finalPrice: data.finalPrice ?? getBasePriceForSelected(),
+              })
+            }
+          }
+        } else {
+          setDiscountInfo(null)
+        }
+      } catch (e) {
+        setDiscountInfo(null)
+      } finally {
+        setIsCheckingDiscount(false)
+      }
+    }, 450)
+
+    return () => clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discountCode, selectedOption])
+
+  const getBasePriceForSelected = useCallback((): number => {
+    if (!selectedOption) return 0
+    const key = String(selectedOption)
+    if (livePrices && typeof livePrices[key] === "number") {
+      return (livePrices[key] as number) || 0
+    }
+    // fallback to static config if live price unavailable
+    return binOptions.find((o) => o.id === selectedOption)?.price || 0
+  }, [selectedOption, livePrices])
 
   const finalPrice = useMemo(() => {
     if (!selectedOption) return 0
-    const basePrice = binOptions.find((option) => option.id === selectedOption)?.price || 0
-    return Math.max(0, basePrice - appliedDiscount)
-  }, [selectedOption, appliedDiscount])
+    // Prefer server-calculated finalPrice when discount info exists
+    if (discountInfo && typeof discountInfo.finalPrice === "number") {
+      return Math.max(0, Math.round(discountInfo.finalPrice))
+    }
+    return getBasePriceForSelected()
+  }, [selectedOption, discountInfo, getBasePriceForSelected])
 
   const selectedBinOption = useMemo(() => binOptions.find((option) => option.id === selectedOption), [selectedOption])
 
@@ -250,8 +333,6 @@ export default function BinCleaningService() {
         date: selectedServiceDate?.date.toISOString(),
         dateFormatted: selectedServiceDate?.formatted,
         discountCode: discountCode,
-        appliedDiscount: appliedDiscount,
-        finalPrice: finalPrice
       }
 
       // Create Stripe checkout session
@@ -356,8 +437,8 @@ export default function BinCleaningService() {
                           </CardTitle>
                           <CardDescription className="mt-1 text-sm sm:text-base">{option.description}</CardDescription>
                         </div>
-                        <div className="text-right ml-4">
-                          <div className="text-2xl sm:text-3xl font-bold text-blue-600">${option.price}</div>
+                         <div className="text-right ml-4">
+                           <div className="text-2xl sm:text-3xl font-bold text-blue-600">${(livePrices && typeof livePrices[String(option.id)] === "number" ? (livePrices[String(option.id)] as number) : option.price)}</div>
                           <div className="text-xs text-gray-500">per service</div>
                         </div>
                       </div>
@@ -472,12 +553,16 @@ export default function BinCleaningService() {
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
                           <span>{selectedBinOption.name}:</span>
-                          <span>${selectedBinOption.price}</span>
+                          <span>${getBasePriceForSelected()}</span>
                         </div>
-                        {appliedDiscount > 0 && (
+                        {discountInfo?.isValid && (discountInfo.discountAmount > 0 || discountInfo.discountPercent > 0) && (
                           <div className="flex justify-between text-sm text-green-600">
                             <span>Discount Applied:</span>
-                            <span>-${appliedDiscount}</span>
+                            <span>
+                              {discountInfo.discountPercent > 0
+                                ? `- ${discountInfo.discountPercent}%`
+                                : `- $${discountInfo.discountAmount}`}
+                            </span>
                           </div>
                         )}
                         <div className="border-t pt-2 flex justify-between font-bold text-base">
@@ -596,33 +681,47 @@ export default function BinCleaningService() {
                     <Label htmlFor="discount" className="text-sm font-medium">
                       Discount Code
                     </Label>
-                    <div className="flex space-x-2 mt-2">
-                      <Input
-                        id="discount"
-                        value={discountCode}
-                        onChange={(e) => setDiscountCode(e.target.value)}
-                        placeholder="Enter discount code"
-                        className="flex-1"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={applyDiscountCode}
-                        disabled={!discountCode.trim()}
-                        className="whitespace-nowrap bg-transparent"
-                      >
-                        Apply Code
-                      </Button>
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="relative flex-1">
+                        <Input
+                          id="discount"
+                          value={discountCode}
+                          onChange={(e) => setDiscountCode(e.target.value)}
+                          placeholder="Enter discount code"
+                          className={`pr-9 ${discountCode.trim() && !isCheckingDiscount && (discountInfo?.isValid ? "border-green-500" : "border-red-500")}`}
+                        />
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                          {isCheckingDiscount ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+                          ) : discountCode.trim().length > 0 ? (
+                            discountInfo?.isValid ? (
+                              <CheckCircle className="h-5 w-5 text-green-600" />
+                            ) : (
+                              <XCircle className="h-5 w-5 text-red-500" />
+                            )
+                          ) : null}
+                        </div>
+                      </div>
+                      {discountCode.trim().length > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            setDiscountCode("")
+                            setDiscountInfo(null)
+                          }}
+                          className="whitespace-nowrap"
+                        >
+                          Remove
+                        </Button>
+                      )}
                     </div>
-                    {appliedDiscount > 0 && (
+                    {discountInfo?.isValid && (
                       <p className="text-green-600 text-sm mt-2 flex items-center">
                         <CheckCircle className="h-4 w-4 mr-1" />
-                        Discount applied: ${appliedDiscount} off!
+                        {discountInfo.discountPercent > 0 ? `${discountInfo.discountPercent}% off applied` : `$${discountInfo.discountAmount} off applied`}
                       </p>
                     )}
-                    <p className="text-xs text-gray-500 mt-2">
-                      Try: <code className="bg-gray-100 px-1 rounded">FIRST5</code>,{" "}
-                    </p>
                   </div>
 
                   <Button

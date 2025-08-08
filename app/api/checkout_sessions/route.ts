@@ -4,7 +4,7 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc } from "firebase/firestore";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2025-07-30.basil",
+  // Rely on default pinned version; avoid TS literal mismatch from earlier scaffold
 });
 
 const getPriceIdForBins = (bins: string) => {
@@ -22,7 +22,7 @@ const getPriceIdForBins = (bins: string) => {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, email, phone, address, notes, bins, date, discountCode, appliedDiscount, finalPrice } = body;
+  const { name, email, phone, address, notes, bins, date, discountCode } = body;
 
   const priceId = getPriceIdForBins(bins);
 
@@ -52,8 +52,6 @@ export async function POST(req: NextRequest) {
       }),
       serviceDateISO: serviceDate.toISOString(),
       discountCode: discountCode || null,
-      appliedDiscount: appliedDiscount || 0,
-      finalPrice: finalPrice,
       paymentStatus: "pending",        // Payment status
       serviceStatus: "awaiting_payment", // Service status
       createdAt: new Date(),
