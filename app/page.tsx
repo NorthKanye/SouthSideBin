@@ -28,6 +28,9 @@ interface BinOption {
   bins: { color: string; type: string; icon: React.ComponentType<React.SVGProps<SVGSVGElement>> }[]
 }
 
+type PurchaseMode = "one_time" | "subscription"
+type SubscriptionPlan = "fortnightly" | "weekly"
+
 interface FormData {
   name: string
   email: string
@@ -107,6 +110,8 @@ export default function BinCleaningService() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedDate, setSelectedDate] = useState<number | null>(null)
   const [livePrices, setLivePrices] = useState<Record<string, number | null> | null>(null)
+  const [purchaseMode, setPurchaseMode] = useState<PurchaseMode>("one_time")
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
 
   const validateEmail = useCallback((email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -320,39 +325,59 @@ export default function BinCleaningService() {
     try {
       const selectedServiceDate = getNextMondays.find((d) => d.id === selectedDate)
 
-      // Prepare data for Stripe checkout
-      const bookingData = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.address,
-        notes: formData.notes,
-        waterAccess: formData.waterAccess,
-        powerAccess: formData.powerAccess,
-        bins: selectedOption.toString(),
-        date: selectedServiceDate?.date.toISOString(),
-        dateFormatted: selectedServiceDate?.formatted,
-        discountCode: discountCode,
-      }
-
-      // Create Stripe checkout session
-      const response = await fetch("/api/checkout_sessions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(bookingData),
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to create checkout session")
-      }
-
-      const { url } = await response.json()
-
-      // Redirect to Stripe Checkout
-      if (url) {
-        window.location.href = url
+      if (purchaseMode === "subscription") {
+        if (!selectedPlan) {
+          alert("Please select a subscription plan")
+          return
+        }
+        const subPayload = {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address,
+          notes: formData.notes,
+          date: selectedServiceDate?.date.toISOString(),
+          plan: selectedPlan,
+        }
+        const response = await fetch("/api/checkout_subscriptions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(subPayload),
+        })
+        if (!response.ok) {
+          throw new Error("Failed to create subscription checkout session")
+        }
+        const { url } = await response.json()
+        if (url) {
+          window.location.href = url
+        }
+      } else {
+        // Prepare data for Stripe checkout (one-time)
+        const bookingData = {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address,
+          notes: formData.notes,
+          waterAccess: formData.waterAccess,
+          powerAccess: formData.powerAccess,
+          bins: selectedOption.toString(),
+          date: selectedServiceDate?.date.toISOString(),
+          dateFormatted: selectedServiceDate?.formatted,
+          discountCode: discountCode,
+        }
+        const response = await fetch("/api/checkout_sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(bookingData),
+        })
+        if (!response.ok) {
+          throw new Error("Failed to create checkout session")
+        }
+        const { url } = await response.json()
+        if (url) {
+          window.location.href = url
+        }
       }
     } catch (error) {
       console.error("Error:", error)
@@ -404,6 +429,138 @@ export default function BinCleaningService() {
                 <p className="text-gray-600">Select the perfect cleaning package for your household needs</p>
               </div>
 
+              {/* Purchase Mode Toggle */}
+              <div className="flex items-center justify-center gap-3 mb-10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPurchaseMode("one_time")
+                    setSelectedPlan(null)
+                  }}
+                  className={`px-5 py-3 rounded-full text-base font-semibold border shadow-sm ${
+                    purchaseMode === "one_time" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700"}
+                  `}
+                  aria-pressed={purchaseMode === "one_time"}
+                >
+                  One-time Service
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPurchaseMode("subscription")
+                    setSelectedOption(null)
+                    setDiscountCode("")
+                    setDiscountInfo(null)
+                  }}
+                  className={`relative px-5 py-3 rounded-full text-base font-semibold border shadow-sm ${
+                    purchaseMode === "subscription" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700"}
+                  `}
+                  aria-pressed={purchaseMode === "subscription"}
+                >
+                  Subscription
+                  <span className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                    purchaseMode === "subscription" ? "bg-white/15 text-white" : "bg-green-100 text-green-700"}
+                  `}>
+                    Save Big!
+                  </span>
+                </button>
+              </div>
+
+              {purchaseMode === "subscription" ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                  <Card
+                    className={`transition-all duration-300 ${selectedPlan === "fortnightly" ? "ring-2 ring-blue-500 bg-blue-50" : "bg-white"}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={selectedPlan === "fortnightly"}
+                    onClick={() => setSelectedPlan("fortnightly")}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedPlan("fortnightly") } }}
+                  >
+                    <CardHeader className="pb-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
+                            2 Bins Fortnightly
+                            {selectedPlan === "fortnightly" && <CheckCircle className="h-5 w-5 text-blue-600" />}
+                          </CardTitle>
+                          <CardDescription className="mt-1 text-sm sm:text-base">Scheduled every 2 weeks</CardDescription>
+                        </div>
+                        <div className="text-right ml-4">
+                          <div className="text-2xl sm:text-3xl font-bold text-blue-600">$60</div>
+                          <div className="text-xs text-gray-500">per month</div>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-3 sm:gap-4 mb-3">
+                        <div className="flex flex-col items-center space-y-2 min-w-0">
+                          <div className={`w-10 h-12 sm:w-12 sm:h-16 bg-red-500 rounded-lg flex items-center justify-center shadow-md`}>
+                            <Trash2 className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
+                          </div>
+                          <span className="text-xs text-gray-600 text-center leading-tight">General Waste</span>
+                        </div>
+                        <div className="flex flex-col items-center space-y-2 min-w-0">
+                          <div className={`w-10 h-12 sm:w-12 sm:h-16 bg-yellow-500 rounded-lg flex items-center justify-center shadow-md`}>
+                            <Recycle className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
+                          </div>
+                          <span className="text-xs text-gray-600 text-center leading-tight">Recycling</span>
+                        </div>
+                      </div>
+                      <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
+                        <li>Pause or cancel anytime</li>
+                        <li>No lock-in contract</li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+
+                  <Card
+                    className={`transition-all duration-300 ${selectedPlan === "weekly" ? "ring-2 ring-blue-500 bg-blue-50" : "bg-white"}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={selectedPlan === "weekly"}
+                    onClick={() => setSelectedPlan("weekly")}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedPlan("weekly") } }}
+                  >
+                    <CardHeader className="pb-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
+                            2 Bins Weekly
+                            {selectedPlan === "weekly" && <CheckCircle className="h-5 w-5 text-blue-600" />}
+                          </CardTitle>
+                          <CardDescription className="mt-1 text-sm sm:text-base">Scheduled every week</CardDescription>
+                        </div>
+                        <div className="text-right ml-4">
+                          <div className="text-2xl sm:text-3xl font-bold text-blue-600">$80</div>
+                          <div className="text-xs text-gray-500">per month</div>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-3 sm:gap-4 mb-3">
+                        <div className="flex flex-col items-center space-y-2 min-w-0">
+                          <div className={`w-10 h-12 sm:w-12 sm:h-16 bg-red-500 rounded-lg flex items-center justify-center shadow-md`}>
+                            <Trash2 className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
+                          </div>
+                          <span className="text-xs text-gray-600 text-center leading-tight">General Waste</span>
+                        </div>
+                        <div className="flex flex-col items-center space-y-2 min-w-0">
+                          <div className={`w-10 h-12 sm:w-12 sm:h-16 bg-yellow-500 rounded-lg flex items-center justify-center shadow-md`}>
+                            <Recycle className="h-4 w-4 sm:h-6 sm:w-6 text-white" />
+                          </div>
+                          <span className="text-xs text-gray-600 text-center leading-tight">Recycling</span>
+                        </div>
+                      </div>
+                      <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1">
+                        <li>Priority scheduling</li>
+                        <li>Pause or cancel anytime</li>
+                      </ul>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : null}
+
+              {purchaseMode === "one_time" && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {binOptions.map((option) => (
                   <Card
@@ -437,10 +594,10 @@ export default function BinCleaningService() {
                           </CardTitle>
                           <CardDescription className="mt-1 text-sm sm:text-base">{option.description}</CardDescription>
                         </div>
-                         <div className="text-right ml-4">
+                        <div className="text-right ml-4">
                            <div className="text-2xl sm:text-3xl font-bold text-blue-600">${(livePrices && typeof livePrices[String(option.id)] === "number" ? (livePrices[String(option.id)] as number) : option.price)}</div>
-                          <div className="text-xs text-gray-500">per service</div>
-                        </div>
+                           <div className="text-xs text-gray-500">per service</div>
+                         </div>
                       </div>
                     </CardHeader>
 
@@ -462,6 +619,7 @@ export default function BinCleaningService() {
                   </Card>
                 ))}
               </div>
+              )}
             </div>
           </section>
 
@@ -547,7 +705,7 @@ export default function BinCleaningService() {
                   </div>
 
                   {/* Price Summary */}
-                  {selectedOption && selectedBinOption && (
+                  {purchaseMode === "one_time" && selectedOption && selectedBinOption && (
                     <div className="bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200 rounded-lg p-4 mb-6">
                       <h4 className="font-semibold text-gray-900 mb-3">Price Summary</h4>
                       <div className="space-y-2">
@@ -677,6 +835,7 @@ export default function BinCleaningService() {
                   </div>
 
                   {/* Discount Code Section */}
+                  {purchaseMode === "one_time" && (
                   <div className="border-t pt-6">
                     <Label htmlFor="discount" className="text-sm font-medium">
                       Discount Code
@@ -723,17 +882,25 @@ export default function BinCleaningService() {
                       </p>
                     )}
                   </div>
+                  )}
 
                   <Button
                     type="submit"
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 text-lg transition-colors"
-                    disabled={!selectedOption || !selectedDate || isSubmitting}
+                    disabled={!selectedOption || !selectedDate || (purchaseMode === "subscription" && !selectedPlan) || isSubmitting}
                   >
                     {isSubmitting ? (
                       <span className="flex items-center justify-center">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                         Processing...
                       </span>
+                    ) : purchaseMode === "subscription" ? (
+                      <>
+                        Start Subscription
+                        {selectedPlan && (
+                          <span className="ml-2">- ${selectedPlan === "weekly" ? 80 : 60}/mo</span>
+                        )}
+                      </>
                     ) : (
                       <>
                         Book Service Now
