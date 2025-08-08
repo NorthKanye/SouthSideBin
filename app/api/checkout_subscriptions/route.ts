@@ -21,7 +21,7 @@ const getSubscriptionPriceId = (plan: SubscriptionPlan) => {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, email, phone, address, notes, date, plan, discountCode } = body as {
+    const { name, email, phone, address, notes, date, plan, discountCode, addressDetails } = body as {
       name: string;
       email: string;
       phone: string;
@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
       date?: string;
       plan: SubscriptionPlan;
       discountCode?: string;
+      addressDetails?: any;
     };
 
     const priceId = getSubscriptionPriceId(plan);
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
       email,
       phone,
       address,
+      addressDetails: addressDetails || null,
       notes: notes || "",
       plan,
       bins: 2,
@@ -74,6 +76,9 @@ export async function POST(req: NextRequest) {
         customerPhone: phone,
         plan,
         bins: "2",
+        address: address || "",
+        placeId: addressDetails?.placeId || "",
+        postalCode: addressDetails?.addressComponents?.postalCode || "",
       },
       subscription_data: {
         metadata: {
@@ -82,6 +87,9 @@ export async function POST(req: NextRequest) {
           customerPhone: phone,
           plan,
           bins: "2",
+          address: address || "",
+          placeId: addressDetails?.placeId || "",
+          postalCode: addressDetails?.addressComponents?.postalCode || "",
         },
       },
     };

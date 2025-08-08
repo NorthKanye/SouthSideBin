@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Trash2, Recycle, Leaf, CheckCircle, XCircle, Phone, Mail, Star, Shield, Clock, Sparkles } from "lucide-react"
+import { AddressAutocomplete, type AddressDetails } from "@/components/address-autocomplete"
 
 interface ServiceDate {
   id: number
@@ -112,6 +113,7 @@ export default function BinCleaningService() {
   const [livePrices, setLivePrices] = useState<Record<string, number | null> | null>(null)
   const [purchaseMode, setPurchaseMode] = useState<PurchaseMode>("one_time")
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null)
+  const [selectedAddress, setSelectedAddress] = useState<AddressDetails | null>(null)
 
   const validateEmail = useCallback((email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -185,10 +187,13 @@ export default function BinCleaningService() {
     if (!formData.address.trim()) {
       errors.address = "Service address is required"
     }
+    if (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY && !selectedAddress?.placeId) {
+      errors.address = errors.address || "Please select an address from suggestions"
+    }
 
     setFormErrors(errors)
     return Object.keys(errors).length === 0
-  }, [formData, validateEmail, validatePhone])
+  }, [formData, validateEmail, validatePhone, selectedAddress])
 
   const handleInputChange = useCallback(
     (field: keyof FormData, value: string | boolean) => {
@@ -336,7 +341,7 @@ export default function BinCleaningService() {
     try {
       const selectedServiceDate = getNextMondays.find((d) => d.id === selectedDate)
 
-      if (purchaseMode === "subscription") {
+        if (purchaseMode === "subscription") {
         const subPayload = {
           name: formData.name,
           email: formData.email,
@@ -346,6 +351,7 @@ export default function BinCleaningService() {
           date: selectedServiceDate?.date.toISOString(),
           plan: selectedPlan,
           discountCode: discountCode,
+            addressDetails: selectedAddress || undefined,
         }
         const response = await fetch("/api/checkout_subscriptions", {
           method: "POST",
@@ -359,7 +365,7 @@ export default function BinCleaningService() {
         if (url) {
           window.location.href = url
         }
-      } else {
+        } else {
         // Prepare data for Stripe checkout (one-time)
         const bookingData = {
           name: formData.name,
@@ -373,6 +379,7 @@ export default function BinCleaningService() {
           date: selectedServiceDate?.date.toISOString(),
           dateFormatted: selectedServiceDate?.formatted,
           discountCode: discountCode,
+            addressDetails: selectedAddress || undefined,
         }
         const response = await fetch("/api/checkout_sessions", {
           method: "POST",
@@ -808,15 +815,22 @@ export default function BinCleaningService() {
                     <Label htmlFor="address" className="text-sm font-medium">
                       Service Address <span className="text-red-500">*</span>
                     </Label>
-                    <Textarea
+                    <AddressAutocomplete
                       id="address"
                       required
                       value={formData.address}
-                      onChange={(e) => handleInputChange("address", e.target.value)}
-                      placeholder="Enter your full address including suburb and postcode"
-                      rows={3}
+                      onChange={(v) => {
+                        handleInputChange("address", v)
+                        setSelectedAddress(null)
+                      }}
+                      onSelect={(details) => {
+                        setSelectedAddress(details)
+                        handleInputChange("address", details.formattedAddress)
+                      }}
+                      placeholder="Search your address"
                       className={formErrors.address ? "border-red-500 focus:border-red-500" : ""}
-                      aria-describedby={formErrors.address ? "address-error" : undefined}
+                      ariaDescribedBy={formErrors.address ? "address-error" : undefined}
+                      countryRestriction="au"
                     />
                     {formErrors.address && (
                       <p id="address-error" className="text-red-500 text-sm mt-1" role="alert">

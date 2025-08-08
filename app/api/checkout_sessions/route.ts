@@ -22,7 +22,7 @@ const getPriceIdForBins = (bins: string) => {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { name, email, phone, address, notes, bins, date, discountCode } = body;
+  const { name, email, phone, address, notes, bins, date, discountCode, addressDetails } = body as any;
 
   const priceId = getPriceIdForBins(bins);
 
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
       phone,
       address,
       notes,
+      addressDetails: addressDetails || null,
       bins: parseInt(bins, 10),
       serviceDate: serviceDate,
       serviceDateFormatted: serviceDate.toLocaleDateString("en-US", {
@@ -76,6 +77,9 @@ export async function POST(req: NextRequest) {
         customerPhone: phone,
         bins: bins,
         discountCode: discountCode || "",
+        address: address || "",
+        placeId: addressDetails?.placeId || "",
+        postalCode: addressDetails?.addressComponents?.postalCode || "",
       },
       payment_intent_data: {
         metadata: {
@@ -83,6 +87,9 @@ export async function POST(req: NextRequest) {
           customerName: name,
           customerPhone: phone,
           bins: bins,
+          address: address || "",
+          placeId: addressDetails?.placeId || "",
+          postalCode: addressDetails?.addressComponents?.postalCode || "",
         },
       },
     };
